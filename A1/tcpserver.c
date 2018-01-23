@@ -25,7 +25,7 @@ int main() {
 
 	/* Address initialization */
 	struct sockaddr_in server;
-	int MYPORTNUM = 1234657;
+	int MYPORTNUM = 12380; //make sure this matches the browser, try switching port if binding error
 	memset(&server, 0, sizeof(server));
 	server.sin_family = AF_INET;
 	server.sin_port = htons(MYPORTNUM);
@@ -60,8 +60,7 @@ int main() {
 
 		/* Accept a connection */
 		int connected_sock;
-		connected_sock = accept(lstn_sock, NULL,
-		NULL);
+		connected_sock = accept(lstn_sock, NULL, NULL);
 		if (connected_sock < 0) {
 			printf("Error in accept()\n");
 			exit(-1);

@@ -21,16 +21,43 @@
 #include <signal.h>
 #include <strings.h>
 #include <netdb.h>
+#include <string.h>
+#include<iostream>
+#include<stdio.h>
+using namespace std;
+
+void init_sockaddr (struct sockaddr_in *name,
+               string hostname,
+               uint16_t port)
+{
+  struct hostent *hostinfo;
+
+  name->sin_family = AF_INET;
+  name->sin_port = htons (port);
+  hostinfo = gethostbyname ("yahoo.ca");
+  if (hostinfo == NULL)
+    {
+      cout<< stderr<< "Unknown host %s.\n"<< hostname<<endl;
+      exit (EXIT_FAILURE);
+    }
+  name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
+}
 
 int main() {
 
 	/* Address initialization */
 	struct sockaddr_in server;
-	int MYPORTNUM = 1234657;
+	int MYPORTNUM = 80;
 	memset(&server, 0, sizeof(server));
-	server.sin_family = AF_INET;
-	server.sin_port = htons(MYPORTNUM);
-	server.sin_addr.s_addr = htonl(INADDR_ANY);
+
+	//server.sin_family = AF_INET;
+	//server.sin_port = htons(MYPORTNUM);
+	//server.sin_addr.s_addr = htonl(INADDR_ANY);
+
+	string hostnam = "pages.cpsc.ucalgary.ca";
+	init_sockaddr(&server, hostnam, MYPORTNUM);
+
+
 
 	/* Create the listening socket */
 	int sock;
@@ -53,7 +80,7 @@ int main() {
 
 	/* Send data*/
 	int count;
-	char message[1024] = { "Hi." };
+	char message[1024] = { "GET /~carey/CPSC441/test1.html HTTP/1.1\r\nHost: www.pages.cpsc.ucalgary.ca\r\n\r\n" };
 	count = send(sock, message, sizeof(message), 0);
 	if (count < 0) {
 		printf("Error in send()\n");
