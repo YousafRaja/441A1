@@ -22,32 +22,14 @@
 #include <boost/algorithm/string/classification.hpp>
 
 using namespace std;
-void extractRequest (char rcv_message [], string &hostname, string &reqMsg);
-void init_sockaddr (struct sockaddr_in *name,
-               string hostname,
-               uint16_t port);
+void extractRequest(char rcv_message[], string &hostname, string &reqMsg);
+void init_sockaddr(struct sockaddr_in *name, string hostname, uint16_t port);
+void init_socket(sockaddr_in &server, int &lstn_sock);
 
-void bindSocket(sockaddr_in &server, int &lstn_sock){
-	/* Bind a socket to a server that already has an address and port */
-	/* Bind the socket to address and port */
-		int status;
-		status = bind(lstn_sock, (struct sockaddr *) &server,
-				sizeof(struct sockaddr_in));
-		if (status < 0) {
-			printf("Error in bind()\n");
-			exit(-1);
-		}
+const int BYTE_WIDTH = 100;
 
-}
-//use ip addr show:
-void setupProxyServer(sockaddr_in &server, int &lstn_sock, int portNumber) {
-
-	/* Address initialization */
-	int MYPORTNUM = portNumber;
-	memset(&server, 0, sizeof(server));
-	server.sin_family = AF_INET;
-	server.sin_port = htons(MYPORTNUM);
-	server.sin_addr.s_addr = htonl(INADDR_ANY);
+void init_socket(sockaddr_in &server, int &lstn_sock) {
+	/* Bind a new socket to a server that already has an address and port */
 
 	/* Create the listening socket */
 	lstn_sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -55,7 +37,7 @@ void setupProxyServer(sockaddr_in &server, int &lstn_sock, int portNumber) {
 		printf("Error in socket() while creating lstn_sock\n");
 		exit(-1);
 	}
-	
+
 	/* Bind the socket to address and port */
 	int status;
 	status = bind(lstn_sock, (struct sockaddr *) &server,
@@ -71,9 +53,23 @@ void setupProxyServer(sockaddr_in &server, int &lstn_sock, int portNumber) {
 		printf("Error in listen()\n");
 		exit(-1);
 	}
+
+}
+//use ip addr show:
+void setupProxyServer(sockaddr_in &server, int &lstn_sock, int portNumber) {
+
+	/* Address initialization */
+	int MYPORTNUM = portNumber;
+	memset(&server, 0, sizeof(server));
+	server.sin_family = AF_INET;
+	server.sin_port = htons(MYPORTNUM);
+	server.sin_addr.s_addr = htonl(INADDR_ANY);
+
+	init_socket(server, lstn_sock);
+
 }
 
-string proxyClient(char rcv_message []){
+string proxyClient(char rcv_message[]) { //todo:pass in upper byte limit,
 	string hostname = "", reqMsg = "";
 	extractRequest(rcv_message, hostname, reqMsg);
 
@@ -102,106 +98,92 @@ string proxyClient(char rcv_message []){
 		printf("Connected.\n");
 	}
 
-	/* Send data*/
-		int count;
-		char message[1024];
-		strcpy(message, reqMsg.c_str());
-		count = send(sock, message, sizeof(message), 0);
-		if (count < 0) {
-			printf("Error in send()\n");
-		}
+	/* Send data to Web Server*/
+	int count;
+	char message[1024];
+	strcpy(message, reqMsg.c_str());
+	count = send(sock, message, sizeof(message), 0);
+	if (count < 0) {
+		printf("Error in send()\n");
+	}
 
+	/* Receive data from Web Server*/
+	char ws_message[1024];
+	count = recv(sock, ws_message, sizeof(ws_message), 0);
+	if (count < 0) {
+		printf("Error in recv()\n");
+	} else {
+		printf("Server: %s\n", ws_message);
+	}
 
-		/* Receive data */
-			char ws_message[1024];
-			count = recv(sock, ws_message, sizeof(ws_message), 0);
-			if (count < 0) {
-				printf("Error in recv()\n");
-			} else {
-				printf("Server: %s\n", ws_message);
-			}
+	using namespace boost::algorithm;
+	string str(ws_message);
+	int c = str.find("Content-Length: ")+16;
+	string l = "";
+	while(str[c]!=13){
+		l+=str[c];
+		c++;
+	}
 
-
-			using namespace boost::algorithm;
-				string str(ws_message);
-
-
-		int i =str.find("<html");
-
-
-		string test = str.substr(i, str.length()-1);
-
-		return str.substr(i, str.length()-1);
+	int i = str.find("<html>");
+	int j = str.find("</html>");
+	return str.substr(i, j);
 
 }
 
+void init_sockaddr(struct sockaddr_in *name, string hostname, uint16_t port) {
+	struct hostent *hostinfo;
 
-void init_sockaddr (struct sockaddr_in *name,
-               string hostname,
-               uint16_t port)
-{
-  struct hostent *hostinfo;
-
-  name->sin_family = AF_INET;
-  name->sin_port = htons (port);
-  hostinfo = gethostbyname ("pages.cpsc.ucalgary.ca");// works only sometimes
-  if (hostinfo == NULL)
-    {
-      cout<< stderr<< "Unknown host %s.\n"<< hostname<<endl;
-      exit (EXIT_FAILURE);
-    }
-  name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
+	name->sin_family = AF_INET;
+	name->sin_port = htons(port);
+	hostinfo = gethostbyname("pages.cpsc.ucalgary.ca"); // works only sometimes
+	if (hostinfo == NULL) {
+		cout << stderr << "Unknown host %s.\n" << hostname << endl;
+		exit(EXIT_FAILURE);
+	}
+	name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
 }
 
-
-
-
-void extractRequest (char rcv_message [], string &hostname, string &reqMsg){
+void extractRequest(char rcv_message[], string &hostname, string &reqMsg) {
 	using namespace boost::algorithm;
 	string str(rcv_message);
 	//msg = "GET http://pages.cpsc.ucalgary.ca/~carey/CPSC441/test1.html HTTP/1.1";
-	 std::vector<std::string> tokens;
-	 split(tokens, str, is_any_of(" "));
+	std::vector<std::string> tokens;
+	split(tokens, str, is_any_of(" "));
 
-	 string type = tokens[0];
+	string type = tokens[0];
 
-	 unsigned int i = 7;
-	 for (; i<tokens[1].length(); i++){
-		 if (tokens[1][i]=='/'){ break;}
-		 hostname += tokens[1][i];
-	 }
+	unsigned int i = 7;
+	for (; i < tokens[1].length(); i++) {
+		if (tokens[1][i] == '/') {
+			break;
+		}
+		hostname += tokens[1][i];
+	}
 
-	 string node = "";
-	 for (; i<tokens[1].length(); i++){
-		 node += tokens[1][i];
-	 }
+	string node = "";
+	for (; i < tokens[1].length(); i++) {
+		node += tokens[1][i];
+	}
 
-	 string httpHost = tokens[2];
+	string httpHost = tokens[2];
 
-	 if (type=="GET"){
-		 reqMsg = "GET " + node + " " + httpHost + " " + hostname + "\r\n\r\n";
-	 }
-
-
-
-
+	if (type == "GET") {
+		reqMsg = "GET " + node + " " + httpHost + " " + hostname + "\r\n\r\n";
+	}
 
 }
 
-
-
-
 int main(int argc, char *argv[]) {
-// How to differentiate client socket and server socket
-// How to get ip address? Parse info in GET request?
-	cout <<"Starting ProxyServerSetup"<<endl;
+// Should buffer size depend on the page?
+	cout << "Starting ProxyServerSetup" << endl;
 	struct sockaddr_in server;
 	int lstn_sock;
-	int portNumber=12388;
+	int portNumber = 12392;
 	setupProxyServer(server, lstn_sock, portNumber);
 
 	/* Main Loop for listening */
-	while(1){
+	while (1) {
 
 		/* Accept a connection */
 		int connected_sock;
@@ -210,44 +192,29 @@ int main(int argc, char *argv[]) {
 			printf("Error in accept()\n");
 			exit(-1);
 		} else {
-			cout <<"a client has connected"<<endl;
+			cout << "a client has connected" << endl;
 		}
-
-		/* Create the proxy listening socket */
-		//int proxy_sock;
-		//proxy_sock = socket(AF_INET, SOCK_STREAM, 0);
-		//if (proxy_sock < 0) {
-		//	printf("Error in socket() while creating prxy_sock\n");
-		//	exit(-1);
-		//}
 
 		/* Send data*/
 		int count;
-		//char message[1024] = { "For termination send \"Bye\"\n" };
-		//count = send(connected_sock, message, sizeof(message), 0);
-		//if (count < 0) {
-		//	printf("Error in send()\n");
-		//}
 
-		/* Receive data */
+		/* Receive data from browser*/
 		char rcv_message[1024];
 		count = recv(connected_sock, rcv_message, sizeof(rcv_message), 0);
 		if (count < 0) {
 			printf("Error in recv()\n");
 		} else {
-			string wsMsg =  proxyClient(rcv_message);
+			/* Receive data from proxy client */
+			string wsMsg = proxyClient(rcv_message);//todo:pass in a requested byte size
 			char ws_message[wsMsg.length()];
 			strcpy(ws_message, wsMsg.c_str());
-			count = send(connected_sock, ws_message, sizeof(ws_message),0);
+			count = send(connected_sock, ws_message, sizeof(ws_message), 0);
 			close(connected_sock);
 			printf("Client said: %s\n", rcv_message);
 			printf("WS response through proxy said: %s\n", ws_message);
 		}
 
-
-
 	}
-
 
 	cout << "Exiting" << endl;
 

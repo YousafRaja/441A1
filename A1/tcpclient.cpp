@@ -47,7 +47,7 @@ int main() {
 
 	/* Address initialization */
 	struct sockaddr_in server;
-	int MYPORTNUM = 80;
+	int MYPORTNUM = 12380;
 	memset(&server, 0, sizeof(server));
 
 	//server.sin_family = AF_INET;
