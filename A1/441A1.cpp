@@ -21,12 +21,17 @@
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/classification.hpp>
 
+#include <iostream>
+#include <sstream>
+
 using namespace std;
-void extractRequest(char rcv_message[], string &hostname, string &reqMsg);
+void extractRequest(char rcv_message[], string &hostname, string &reqMsg,
+		int &byteRange, bool ranged);
 void init_sockaddr(struct sockaddr_in *name, string hostname, uint16_t port);
 void init_socket(sockaddr_in &server, int &lstn_sock);
 
 const int BYTE_WIDTH = 100;
+const int MESSAGE_BUFFER = 100000;
 
 void init_socket(sockaddr_in &server, int &lstn_sock) {
 	/* Bind a new socket to a server that already has an address and port */
@@ -69,15 +74,29 @@ void setupProxyServer(sockaddr_in &server, int &lstn_sock, int portNumber) {
 
 }
 
-string proxyClient(char rcv_message[]) { //todo:pass in upper byte limit,
-	string hostname = "", reqMsg = "";
-	extractRequest(rcv_message, hostname, reqMsg);
+string getBody(string ws_message){
+	string str = ws_message;
+	int i = str.find("\r\n\r\n");
+	string body = str.substr(i+4, BYTE_WIDTH);
+	cout <<"GETBODY: "<< body << endl;
+	return body;
+}
 
-	struct sockaddr_in webServer;
-	int PORTNUM = 80;
-	memset(&webServer, 0, sizeof(webServer));
+int getResponseLength(string ws_message) {
+	int c = ws_message.find("Content-Length: ") + 16;
+	string l = "";
+	while (ws_message[c] != 13) {
+		l += ws_message[c];
+		c++;
+	}
 
-	init_sockaddr(&webServer, hostname, PORTNUM);
+	stringstream ss(l);
+	int r;
+	ss >> r;
+	return r;
+}
+
+string webServerCall(sockaddr_in webServer, string reqMsg) {
 
 	/* Create the listening socket */
 	int sock;
@@ -100,7 +119,7 @@ string proxyClient(char rcv_message[]) { //todo:pass in upper byte limit,
 
 	/* Send data to Web Server*/
 	int count;
-	char message[1024];
+	char message[MESSAGE_BUFFER];
 	strcpy(message, reqMsg.c_str());
 	count = send(sock, message, sizeof(message), 0);
 	if (count < 0) {
@@ -108,26 +127,67 @@ string proxyClient(char rcv_message[]) { //todo:pass in upper byte limit,
 	}
 
 	/* Receive data from Web Server*/
-	char ws_message[1024];
+	char ws_message[MESSAGE_BUFFER];
 	count = recv(sock, ws_message, sizeof(ws_message), 0);
 	if (count < 0) {
 		printf("Error in recv()\n");
 	} else {
-		printf("Server: %s\n", ws_message);
+		cout << ("Server: %s\n", ws_message);
+	}
+
+	close(sock);
+	return ws_message;
+}
+
+string proxyClient(char rcv_message[]) { //todo:pass in upper byte limit,
+	string hostname = "", reqMsg = "";
+	int byteRange = 0;
+	extractRequest(rcv_message, hostname, reqMsg, byteRange, false);
+
+	struct sockaddr_in webServer;
+	int PORTNUM = 80;
+	memset(&webServer, 0, sizeof(webServer));
+
+	init_sockaddr(&webServer, hostname, PORTNUM);
+
+	int byteLimit = getResponseLength(webServerCall(webServer, reqMsg));
+
+	string str;
+	while (byteRange <= byteLimit) {
+
+//		/* Send data to Web Server*/
+//		int count;
+//		char message[1024];
+//		strcpy(message, reqMsg.c_str());
+//		count = send(sock, message, sizeof(message), 0);
+//		if (count < 0) {
+//			printf("Error in send()\n");
+//		}
+//
+//		/* Receive data from Web Server*/
+//		char ws_message[1024];
+//		count = recv(sock, ws_message, sizeof(ws_message), 0);
+//		if (count < 0) {
+//			printf("Error in recv()\n");
+//		} else {
+//			printf("Server: %s\n", ws_message);
+//		}
+		string tempMsg = "";
+		string tempHost = "";
+		extractRequest(rcv_message, tempHost, tempMsg, byteRange, true);
+		str += getBody(webServerCall(webServer, tempMsg));
+		byteRange += BYTE_WIDTH;
+
 	}
 
 	using namespace boost::algorithm;
-	string str(ws_message);
-	int c = str.find("Content-Length: ")+16;
-	string l = "";
-	while(str[c]!=13){
-		l+=str[c];
-		c++;
-	}
 
 	int i = str.find("<html>");
 	int j = str.find("</html>");
-	return str.substr(i, j);
+	if (j<0){
+		cout <<"Error: Missing </html> tag, check message buffer size" << endl;
+	}
+	return str.substr(i, (j-i)+7);
 
 }
 
@@ -144,7 +204,8 @@ void init_sockaddr(struct sockaddr_in *name, string hostname, uint16_t port) {
 	name->sin_addr = *(struct in_addr *) hostinfo->h_addr;
 }
 
-void extractRequest(char rcv_message[], string &hostname, string &reqMsg) {
+void extractRequest(char rcv_message[], string &hostname, string &reqMsg,
+		int &byteRange, bool ranged) {
 	using namespace boost::algorithm;
 	string str(rcv_message);
 	//msg = "GET http://pages.cpsc.ucalgary.ca/~carey/CPSC441/test1.html HTTP/1.1";
@@ -169,17 +230,34 @@ void extractRequest(char rcv_message[], string &hostname, string &reqMsg) {
 	string httpHost = tokens[2];
 
 	if (type == "GET") {
-		reqMsg = "GET " + node + " " + httpHost + " " + hostname + "\r\n\r\n";
+		reqMsg = type + " " + node + " " + httpHost + " " + hostname + "\r\n";
+
+		if (ranged) {
+			std::stringstream ss;
+			ss << byteRange;
+			string from, to;
+			ss >> from;
+			ss.clear();
+			ss << (byteRange + BYTE_WIDTH);
+			ss >> to;
+
+			/*ranged request*/
+			reqMsg += "Range: bytes=" + from + "-" + to + "\r\n";
+		}
 	}
+
+	/*final step*/
+	reqMsg += "\r\n";
 
 }
 
 int main(int argc, char *argv[]) {
+
 // Should buffer size depend on the page?
 	cout << "Starting ProxyServerSetup" << endl;
 	struct sockaddr_in server;
 	int lstn_sock;
-	int portNumber = 12392;
+	int portNumber = 12284;
 	setupProxyServer(server, lstn_sock, portNumber);
 
 	/* Main Loop for listening */
@@ -199,13 +277,13 @@ int main(int argc, char *argv[]) {
 		int count;
 
 		/* Receive data from browser*/
-		char rcv_message[1024];
+		char rcv_message[MESSAGE_BUFFER];
 		count = recv(connected_sock, rcv_message, sizeof(rcv_message), 0);
 		if (count < 0) {
 			printf("Error in recv()\n");
 		} else {
 			/* Receive data from proxy client */
-			string wsMsg = proxyClient(rcv_message);//todo:pass in a requested byte size
+			string wsMsg = proxyClient(rcv_message); //todo:pass in a requested byte size
 			char ws_message[wsMsg.length()];
 			strcpy(ws_message, wsMsg.c_str());
 			count = send(connected_sock, ws_message, sizeof(ws_message), 0);
