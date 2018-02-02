@@ -1,5 +1,5 @@
 # 441A1 test3
-REQUIREMENTS:
+Requirements:
 C++ with GCC compiler
 Tested on Firefox in Ubuntu 16.04
 
