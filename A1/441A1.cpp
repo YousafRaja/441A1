@@ -26,13 +26,13 @@
 #include <thread>
 
 using namespace std;
-const int PROXYPORT = 12280;
+const int PROXYPORT = 12282;
 
 class ProxyNode {
 
 public:
 
-	const int BYTE_WIDTH = 100; // max recommended size: 100000
+	const int BYTE_WIDTH = 100000; // max recommended size: 100000
 	const int MESSAGE_BUFFER = 1000000; //max recommended size: 1000000
 	static const int num_threads = 100;
 	const bool SLOWDOWN = true;
