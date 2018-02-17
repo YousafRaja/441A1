@@ -21,8 +21,22 @@ How many bytes should be requested from each range request.
 MESSAGE_BUFFER:
 The size of the string which stores the response recieved from the web server.
 
-Tested On:
-http://www.ucalgary.ca
+Testing:
+Tested on home and university network.
+
+SLOWDOWN = True, BYTE_WIDTH = 100 
+
+http://pages.cpsc.ucalgary.ca/~carey/CPSC441/test0.txt,  nearly instant
+
+http://pages.cpsc.ucalgary.ca/~carey/CPSC441/test1.html, nearly instant
+
+http://pages.cpsc.ucalgary.ca/~carey/CPSC441/test2.html, a few seconds
+
+http://pages.cpsc.ucalgary.ca/~carey/CPSC441/test3.html, about 30 seconds
+
+SLOWDOWN = True, BYTE_WIDTH = 100,000 
+
+http://www.ucalgary.ca, about 1 minute
 
 Limitations:
 Only works with certain http sites. 
