@@ -15,7 +15,9 @@ int OCTOLEG_SIZE = 1111;
 int OCTOMINI_SIZE = 8;
 char PADBYTE = '~';
 
-string sendMsg(string msg, int sock, struct sockaddr_in server_address ){
+string sendMsg(string msg, int sock, struct sockaddr_in server_address) { //TODO: Modify to include ACK # (start byte index/8)
+
+
 
 	// send data
 	const char* data_to_send = msg.c_str();
@@ -28,96 +30,104 @@ string sendMsg(string msg, int sock, struct sockaddr_in server_address ){
 	char buffer[BUFFER_SIZE];
 	int recv_bytes = recvfrom(sock, buffer, BUFFER_SIZE, 0, NULL, NULL);
 	printf("received bytes = %d\n", recv_bytes);
-	//buffer[len] = '\0';
+	buffer[BUFFER_SIZE] = '\0';
 	printf("recieved: '%s'\n", buffer);
 	return buffer;
 
 }
 
-
-
-
-string intToString(int i){
+string intToString(int i) {
 	stringstream ss;
 	ss << i;
 	return ss.str();
 }
 
-int stringToInt(string s){
+int stringToInt(string s) {
 	stringstream ss(s);
 	int i;
 	ss >> i;
 	return i;
 }
 
-string requestOctoBlock(string fileName, int sock, struct sockaddr_in server_address, int blockNumber){
-		string data = "OctoGetBlock:" + fileName + " " + intToString(blockNumber);
-		return sendMsg(data, sock, server_address);
+
+string requestOctoBlock(string fileName, int sock,
+		struct sockaddr_in server_address, int blockNumber) {
+	string data = "OctoGetBlock:" + fileName + " " + intToString(blockNumber);
+	return sendMsg(data, sock, server_address);
 }
 
-string requestOctoLeg(string fileName, int sock, struct sockaddr_in server_address, int blockNumber, int legNumber){
-		string data = "OctoGetLeg:" + fileName + " " +intToString(blockNumber)+" "+intToString(legNumber);
-		return sendMsg(data, sock, server_address);
+string requestOctoLeg(string fileName, int sock,
+		struct sockaddr_in server_address, int blockNumber, int legNumber) {
+
+	string data = "OctoGetLeg:" + fileName + " " + intToString(blockNumber)
+			+ " " + intToString(legNumber);
+
+	return sendMsg(data, sock, server_address);
 }
 
-string requestOctoMinis(string fileName, int sock, struct sockaddr_in server_address, int blockNumber, int legNumber, int miniNumber){
-		string data = "OctoGetMinis:" + fileName + " " +intToString(blockNumber)+" "+intToString(legNumber)+" "+intToString(miniNumber);
-		return sendMsg(data, sock, server_address);
+string requestOctoMinis(string fileName, int sock,
+		struct sockaddr_in server_address, int blockNumber, int legNumber,
+		int miniNumber) {
+	string data = "OctoGetMinis:" + fileName + " " + intToString(blockNumber)
+			+ " " + intToString(legNumber) + " " + intToString(miniNumber);
+	return sendMsg(data, sock, server_address);
 }
 
-int getFileLength(string fileName, int sock,struct sockaddr_in server_address) {
+int getFileLength(string fileName, int sock,
+		struct sockaddr_in server_address) {
 	// send data
 	string data = OctoCheck + fileName;
 	string response = sendMsg(data, sock, server_address);
 	return stringToInt(response);
 }
 
-int getPaddedSize(int partialLeg){
-	while(partialLeg%8!=0){
+int getPaddedSize(int partialLeg) {
+	while (partialLeg % 8 != 0) {
 		partialLeg++;
 	}
 	return partialLeg;
 }
 
-string trimPadding(string data){
+string trimPadding(string data) {
+	cout << "bytes to trim" << endl;
+	cout << data << endl;
 	int i = 0;
-	int s = data.size()-1;
-	for (;i<s; i++){
-		if (data[s-i]==PADBYTE){
+	int s = data.size() - 1;
+	for (; i < s; i++) {
+		if (data[s - i] == PADBYTE) {
 			i++;
 		} else {
-			i--;
+			//i--;
 			break;
 		}
 	}
-	return data.substr(0, data.size()-i);
+	return data.substr(0, data.size() - i);
 }
 //string generateRequest(string fileName, int fileLength){
 //
 //}
 
-int getOctoblocks(int fileLength){
-	return fileLength/OCTOBLOCK_SIZE;
+int getOctoblocks(int fileLength) {
+	return fileLength / OCTOBLOCK_SIZE;
 }
 
 int getOctolegs(int blockLength) {
-	return blockLength/OCTOLEG_SIZE;
+	return blockLength / OCTOLEG_SIZE;
 }
 
 int getOctoMinis(int legLength) {
-	return (getPaddedSize(legLength)/OCTOMINI_SIZE);
+	return (getPaddedSize(legLength) / OCTOMINI_SIZE);
 }
 
-void saveToFile(string filename, string data){
+void saveToFile(string filename, string data) {
 	ofstream myfile;
-	  myfile.open (filename.c_str());
-	  myfile << data;
-	  myfile.close();
+	myfile.open(filename.c_str());
+	myfile << data;
+	myfile.close();
 }
 
 #define PORT 8001
 int main() {
-
 
 	const char* server_name = "localhost"; //loopback
 	const int server_port = PORT;
@@ -143,21 +153,20 @@ int main() {
 	printf("client socket created\n");
 
 	// get filename
-	string filename = "739.txt";
+	string filename = "1KB.txt";
 	//cout <<"Hello, please enter the name of the file you'd like to retrieve" << endl;
 	//cin >> filename;
 
 	string fullResponse = "";
 	int remainingSize = getFileLength(filename, sock, server_address);
 	int b = getOctoblocks(remainingSize);
-	remainingSize -= b*OCTOBLOCK_SIZE;
+	remainingSize -= b * OCTOBLOCK_SIZE;
 
 	int l = getOctolegs(remainingSize);
-	remainingSize -= l*OCTOLEG_SIZE;
+	remainingSize -= l * OCTOLEG_SIZE;
 
 	int m = getOctoMinis(remainingSize);
-	remainingSize = m*OCTOMINI_SIZE - remainingSize; //any remaining amount will be pad bytes
-
+	remainingSize = m * OCTOMINI_SIZE - remainingSize; //any remaining amount will be pad bytes
 
 	for (int i = 0; i < b; i++) {
 		//request full block OctoGetBlock block#
@@ -165,16 +174,26 @@ int main() {
 		//wait till recved
 	}
 
-
-	for (int j = 0; j < l; j++) {//new process for each leg
+	for (int j = 0; j < l; j++) { //new process for each leg
 		//OctoGetLeg block# leg#
 		fullResponse += requestOctoLeg(filename, sock, server_address, b, j);
+		cout << "current full response:" << endl;
+		cout << fullResponse << endl;
 		//wait till recevd
 	}
 
-	if (m){
-		fullResponse += trimPadding(requestOctoMinis(filename, sock, server_address, b, l, m));
+	if (m) {
+		string requestedminis = trimPadding(
+				requestOctoMinis(filename, sock, server_address, b, l, m));
+		cout << "requested minis:" << endl;
+		cout << requestedminis << endl;
+		fullResponse += requestedminis;
+		//fullResponse += trimPadding(requestOctoMinis(filename, sock, server_address, b, l, m));
 	}
+
+	cout << "current full response2:" << endl;
+	cout << fullResponse << endl;
+
 	//calculate actual remaining size
 	//calculate padded size
 	//new process for miniblock

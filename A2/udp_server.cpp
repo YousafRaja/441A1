@@ -41,7 +41,7 @@ int stringToInt(string s) {
 	return i;
 }
 
-string generateResponse(string request) {
+string generateResponse(string request) { // TODO: also return a ACK#
 
 	string type;
 	string filename = "";
@@ -123,9 +123,13 @@ string generateResponse(string request) {
 			miniNumber = stringToInt(mN);
 		}
 
+
 		response = fileManager.getFileRange(filename,
 						((blockNumber*blockSize) + (legNumber*legSize)),
 						(miniNumber*miniSize));
+		response = fileManager.addPadding(response,response.size());
+		cout <<"mini response:"<<endl;
+		cout<<response<<endl;
 
 	}
 
@@ -195,12 +199,40 @@ int main(int argc, char *argv[]) {
 		string response = generateResponse(buffer);
 		cout << "generated response: " << response << endl;
 		int n = response.length();
-		char char_array[n + 1];
+		char char_array[n];
 		strcpy(char_array, response.c_str());
-		int sent_len = sendto(sock, char_array, n + 1, 0,
+		int sent_len = sendto(sock, char_array, n+1, 0,
 				(struct sockaddr *) &client_address, client_address_len);
 		printf("server sent back message of size:%d\n", sent_len);
 		printf("server sent back message containing:%s\n", response);
+
+
+
+		int pipe1[2]; // Read from parent to check timeout
+
+		pid_t p;
+
+		p = fork();
+
+		// Parent process
+		if (p > 0) {
+			int pipe2[2]; // Read from parent to check ACKs
+			pid_t p2;
+			p2 = fork();
+
+			if (p2>0){ // parent
+				// read from pipe2 to check ACK
+				// read from pipe1 to check for timeout
+				// take action based on what was read
+			} else { // child2
+				// call recevfrom() to receive the possible ACK from the client
+				// use pipe2 to send the notification to the parent process
+			}
+
+		}	else { //child process
+			// start timer
+			// use pipe1 to send notification after timer is done
+		}
 
 	}
 	close(sock);
