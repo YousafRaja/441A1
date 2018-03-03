@@ -21,6 +21,8 @@ int OCTOLEG_SIZE = 1111;
 int OCTOMINI_SIZE = 8;
 char PADBYTE = '~';
 
+bool packetDropped = true;
+
 int getRandom() {
 	std::random_device rd;
 	std::mt19937 mt(rd()); // seed the Mersenne Twister generator
@@ -73,12 +75,12 @@ string SendRecvMsg(string msg, int sock, struct sockaddr_in server_address) { //
 
 string extractData(string payload) {
 	int s = payload.size();
-	return payload.substr(0, s - (8 + 4)); //sequence code 8, id code 4
+	return payload.substr(0, s - (8 + 6)); //sequence code 8, id code 4
 }
 
 string extractSequence(string payload) {
 	int s = payload.size();
-	string n = payload.substr(s - 1 - 11, 8);
+	string n = payload.substr(s - 1 - 13, 8);
 	return n;
 	//return stringToInt(n);
 }
@@ -91,9 +93,15 @@ int getSequenceNum(string sequence) {
 	}
 }
 
+int extractBlockNum(string payload) {
+	int s = payload.size();
+	string n = payload.substr(s - 1, 1);
+	return stringToInt(n);
+}
+
 int extractID(string payload) {
 	int s = payload.size();
-	string n = payload.substr(s - 1 - 3, 4);
+	string n = payload.substr(s - 1 - 5, 4);
 	return stringToInt(n);
 }
 
@@ -126,19 +134,45 @@ int extractID(string payload) {
 //
 //}
 
+bool packetLoss(){
+	return false;//override
+	int n = getRandom();
+	if (n>9000){
+		return true;
+	} else {
+		return false;
+	}
+}
+
 string collectResponses(int sock, struct sockaddr_in server_address,
-		int expectedID, int parts) { //TODO: Implement
+		int expectedID, int parts, int currentBlock) { //TODO: Implement
 	map<int, string> fileParts;
 	bool complete = false;
 	char buffer[BUFFER_SIZE];
 	bool valid = false;
+
 	while (!complete) {
 		int recv_bytes = recvfrom(sock, buffer, BUFFER_SIZE, 0, NULL, NULL);
-		if (recv_bytes >= 0) {
+		bool lost = false;
+		lost = packetLoss();
+
+		if (!packetDropped){
+			packetDropped=true;
+			lost = true;
+		}
+
+		if (recv_bytes >= 0 && !lost) {
 			printf("received bytes = %d\n", recv_bytes);
 			buffer[BUFFER_SIZE] = '\0';
 			printf("recieved payload: '%s'\n", buffer);
 			int extractedID = extractID(buffer);
+			int extractedBlockNum = extractBlockNum(buffer);
+//			if (currentBlock!=extractedBlockNum){
+//				cout <<"Block numbers don't match"<<endl;
+//				cout <<"expected: "<<currentBlock<<" recvd "<<extractedBlockNum<<endl;
+//				return "";
+//			}
+
 			if (extractedID == expectedID) {
 				//extract sequence number
 				string seq = "";
@@ -146,6 +180,7 @@ string collectResponses(int sock, struct sockaddr_in server_address,
 				int s = getSequenceNum(seq);
 				//process sequence number into map
 				fileParts[s] = extractData(buffer);
+
 				//check if complete
 				complete = true;
 				cout << "recieved part " << intToString(s) << endl;
@@ -165,6 +200,10 @@ string collectResponses(int sock, struct sockaddr_in server_address,
 				return "";
 			}
 		} else {
+			if (lost){
+				cout <<"PACKET LOST"<<endl;
+				lost = packetLoss();
+			}
 			//Message Receive Timeout or other error
 			return "";
 		}
@@ -173,7 +212,7 @@ string collectResponses(int sock, struct sockaddr_in server_address,
 	cout << "all parts received, sending ACK" << endl;
 	//received all parts, now sending ack
 	int ACK = expectedID;
-	SendMsg(intToString(ACK + 1), sock, server_address);
+	SendMsg(intToString(ACK+1)+" "+intToString(currentBlock+1), sock, server_address);
 	//concatenate fileParts and returns
 	string response = "";
 	string temp = "~";
@@ -202,24 +241,26 @@ string getTinyLegs(string filename, int filesize, int sock,
 
 	int ranNum = getRandom();
 
-	string msg = "OctoGetTinyLegs:" + filename + " " + intToString(filesize)
-			+ " " + intToString(ranNum);
+	string msg = "OctoGetTinyLegs:" + filename + " " + intToString(filesize) + " " + intToString(ranNum) + " " + "0";
 
-	const char* data_to_send = msg.c_str();
-	int len = sendto(sock, data_to_send, strlen(data_to_send), 0,
-			(struct sockaddr*) &server_address, sizeof(server_address));
-
-	while(response==""){
+	do {
+		const char* data_to_send = msg.c_str();
+		int len = sendto(sock, data_to_send, strlen(data_to_send), 0,
+				(struct sockaddr*) &server_address, sizeof(server_address));
 
 		printf("message has been sent to server\n");
 
-		response = collectResponses(sock, server_address, ranNum, parts);
+		response = collectResponses(sock, server_address, ranNum, parts, 0);
 		if (response == "") {
 			printf("Timeout or error in t, re-sending\n");
 		}
-	}
+	} while (response == "");
 
+	string ACK = intToString(ranNum + 1);
 
+	const char* data_to_send = ACK.c_str();
+	int len = sendto(sock, data_to_send, strlen(data_to_send), 0,
+			(struct sockaddr*) &server_address, sizeof(server_address));
 
 	return response;
 
@@ -235,24 +276,23 @@ string getPartialLegs(string filename, int filesize, int sock,
 	int parts = 8;
 	string response = "";
 
-	int ranNum = getRandom();
-	string msg = "OctoGetPartLegs:" + filename + " " + intToString(filesize)
-			+ " " + intToString(ranNum);
-
-	const char* data_to_send = msg.c_str();
-	int len = sendto(sock, data_to_send, strlen(data_to_send), 0,
-			(struct sockaddr*) &server_address, sizeof(server_address));
-
 	while (response == "") {
-
+		int ranNum = getRandom();
+		string msg = "OctoGetPartLegs:" + filename + " " + intToString(filesize)
+				+ " " + intToString(ranNum) + " " + "0";
+		do {
+			const char* data_to_send = msg.c_str();
+			int len = sendto(sock, data_to_send, strlen(data_to_send), 0,
+					(struct sockaddr*) &server_address, sizeof(server_address));
 
 			printf("message has been sent to server with the following ID:\n");
 			cout << "expectedID:" << ranNum << endl;
-			response = collectResponses(sock, server_address, ranNum, parts);
+
+			response = collectResponses(sock, server_address, ranNum, parts, 0);
 			if (response == "") {
 				printf("Timeout or error in partial legs, re-sending\n");
 			}
-
+		} while (response == "");
 
 	}
 	return response;
@@ -269,13 +309,16 @@ string getFullLegs(string filename, int filesize, int sock,
 	int completedBlocks = (filesize / OCTOBLOCK_SIZE);
 	int parts = 8;
 	int totalParts = completedBlocks * 8;
+	int originalTotal = totalParts;
 	string totalResponse = "";
 	string response = "";
 
 	int packetID = getRandom();
-
+	int originalID = packetID;
+	int blockNum = 0;
+	string packetIDstr = intToString(packetID);
 	string msg = "OctoGetFullLegs:" + filename + " " + intToString(filesize)
-			+ " " + intToString(packetID);
+			+ " " + packetIDstr + " " + intToString(blockNum);;
 
 	const char* data_to_send = msg.c_str();
 	int len = sendto(sock, data_to_send, strlen(data_to_send), 0,
@@ -283,15 +326,19 @@ string getFullLegs(string filename, int filesize, int sock,
 	printf("message has been sent to server\n");
 
 	while (totalParts > 0 || response == "") {
-
-
-		response = collectResponses(sock, server_address, packetID,
-				totalParts);
+		response = collectResponses(sock, server_address, packetID, totalParts, blockNum);
 		if (response == "") {
-			printf("Timeout or error in full legs, re-sending\n");
+			printf("Timeout or error in full legs, waiting for server to retransmit\n ");
+			packetID = originalID;
+			totalParts = originalTotal;
+//			int len = sendto(sock, data_to_send, strlen(data_to_send), 0,
+//					(struct sockaddr*) &server_address, sizeof(server_address));
+//			printf("another message has been sent to server\n");
+
 		} else {
 			packetID++; //update after every full block is received
 			totalParts -= 8;
+			blockNum++;
 			//cout "RECEIVED OCTOBLOCK:"<<endl;
 			//cout<<
 			totalResponse += response;
@@ -451,15 +498,15 @@ int main() {
 	}
 	printf("client socket created\n");
 
-	struct timeval timeout = { 60, 0 }; //set timeout for 2 seconds
-
-	/* set receive UDP message timeout */
-
-	setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout,
-			sizeof(struct timeval));
+//	struct timeval timeout = { 5, 0 }; //set timeout for 2 seconds
+//
+//	/* set receive UDP message timeout */
+//
+//	setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout,
+//			sizeof(struct timeval));
 
 	// get filename
-	string filename = "32KB.txt";
+	string filename = "763.txt";
 	//cout <<"Hello, please enter the name of the file you'd like to retrieve" << endl;
 	//cin >> filename;
 
@@ -469,18 +516,18 @@ int main() {
 	int partialBlock;
 	int filesize = remainingSize;
 	fullResponse += getFullLegs(filename, filesize, sock, server_address);
-	cout << "Fullleg:" << endl;
-	cout << fullResponse << endl;
+//	cout << "Fullleg:" << endl;
+//	cout << fullResponse << endl;
 	string partialResponse = getPartialLegs(filename, filesize, sock,
 			server_address);
 	cout << "Partialleg:" << endl;
 	cout << partialResponse << endl;
 	fullResponse += partialResponse;
-
-	string TinyLeg = getTinyLegs(filename, filesize, sock, server_address);
-	cout <<"TinyLeg:"<<endl;
-	cout<<TinyLeg<<endl;
-	fullResponse += TinyLeg;
+//
+//	string TinyLeg = getTinyLegs(filename, filesize, sock, server_address);
+//	cout <<"TinyLeg:"<<endl;
+//	cout<<TinyLeg<<endl;
+//	fullResponse += TinyLeg;
 	//remainingSize -= (filesize / OCTOBLOCK_SIZE) * OCTOBLOCK_SIZE;
 	//partialBlock = remainingSize - (remainingSize % 8);
 	//remainingSize = (remainingSize % 8);
@@ -522,3 +569,4 @@ int main() {
 	close(sock);
 	return 0;
 }
+
