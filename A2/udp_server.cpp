@@ -25,8 +25,14 @@
 #include <sstream>
 
 #include <bits/stdc++.h>
+
 #define PORT 8001
+
 using namespace std;
+
+#define READ_FD     0
+#define WRITE_FD    1
+
 char PADBYTE = '~';
 int OCTOBLOCK_SIZE = 8888;
 int OCTOLEG_SIZE = 1111;
@@ -231,6 +237,147 @@ void reply(string response, int sock, struct sockaddr_in client_address) {
 
 }
 
+void listenForMsg(int sock, struct sockaddr_in client_address, char* buffer) {
+	// read content into buffer from an incoming client
+	unsigned int client_address_len = sizeof(client_address);
+	int len = recvfrom(sock, buffer, sizeof(buffer), 0,
+			(struct sockaddr *) &client_address, &client_address_len);
+
+	// inet_ntoa prints user friendly representation of the
+	// ip address
+	buffer[len] = '\0';
+	printf("received: '%s' from client %s on port %d\n", buffer,
+			inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
+
+}
+
+void setTimeout(int milliseconds) {
+	clock_t end;
+// a current time of milliseconds
+	clock_t start = clock() * 1000 / CLOCKS_PER_SEC;
+	int gap;
+	do {
+		end = clock() * 1000 / CLOCKS_PER_SEC;
+		gap = (int) end - start;
+	} while (gap < milliseconds);
+}
+
+bool isValidID(string msg) {
+	if (msg.size() == 4) {
+		return true;
+	}
+}
+//
+//bool waitForACK(string packetIDstr, int sock,
+//		struct sockaddr_in client_address) {
+//
+//	string msg = "";
+//	int packetID = stringToInt(packetIDstr);
+//	string ACKstr = intToString(packetID + 1);
+//
+//	int check = 100;
+//	while (check < 100) {
+//		check++;
+//		char buffer[500];
+//		listenForMsg(sock, client_address, buffer);
+//		string str(buffer);
+//		msg = str;
+//		cout << "expecting " << ACKstr << " received " << msg << endl;
+//
+//		if (isValidID(msg)) {
+//			int recvdID = stringToInt(msg);
+//			int ACK = stringToInt(ACKstr);
+//			if (recvdID > ACK && (recvdID - ACK) < 8) {
+//				break;
+//			}
+//		}
+//
+//	}
+//
+//	return (check < 100);
+//}
+
+void listenForACK(string packetID, int sock, struct sockaddr_in client_address,
+		bool &heard) {
+
+	int fd[2];
+	pipe(fd);
+	int pid = fork();
+	if (pid == 0) {
+		close(fd[READ_FD]);
+
+		/* Child 1 Process */
+		cout << "child 1 process started" << endl;
+
+		string msg = "";
+		string ACK = intToString((stringToInt(packetID) + 1));
+		bool recvd = false;
+		//write(fd[1], &recvd, sizeof(bool));
+		while (msg != ACK) {
+			if (recvd == false) {
+				write(fd[1], &recvd, sizeof(bool));
+			}
+			//sleep(2);
+			char buffer[500];
+			cout << "child 1 listening for ACK..." << endl;
+			listenForMsg(sock, client_address, buffer);
+			string str(buffer);
+			msg = str;
+			cout << "child 1 expecting " << ACK << " received " << msg << endl;
+		}
+		recvd = true;
+		int c1 = 1;
+		write(fd[1], &recvd, sizeof(bool));
+		//write(fd[1], &c1, sizeof(int));
+		close(fd[1]);
+		cout << "finished child 1 process" << endl;
+		exit(-1);
+	} else if (pid < 0) {
+		printf("Error.\n");
+	} else {
+		/* Parent Process */
+		int fd2[2];
+		pipe(fd2);
+		int pid2 = fork();
+		if (pid2 == 0) {
+			/* Child 2 Process */
+			close(fd2[0]);
+			int c2 = 3;
+			string test = "a";
+			while (test.size() < 5) {
+				write(fd2[1], &test, sizeof(string));
+				setTimeout(2000);
+				test += "a";
+				//cout << "test: " << test << endl;
+			}
+			close(fd2[1]);
+			exit(-1); //or else timer will never stop repeating
+		} else if (pid2 > 0) {
+			/* Parent Process */
+			close(fd[WRITE_FD]);
+			close(fd2[WRITE_FD]);
+			bool recvd = false;
+			string s = "";
+			while (s.size() < 5) {
+				s += "a";
+				read(fd[0], &recvd, sizeof(bool));
+				read(fd2[0], &s, sizeof(string));
+				cout << "PARENT: ACK: " << recvd << " check# " << s << endl;
+				if (recvd == true) {
+					break;
+				}
+
+			}
+			cout << "EXITING PARENT" << endl;
+			close(fd[READ_FD]);
+			close(fd2[READ_FD]);
+			heard = recvd;
+			//exit(-1);
+
+		}
+	}
+}
+
 void multiResponse(string request, int sock,
 		struct sockaddr_in client_address) {
 
@@ -256,15 +403,30 @@ void multiResponse(string request, int sock,
 	int miniNumber;
 	string bN, lN, mN = "";
 	if (type == "OctoCheck:") {
-		for (; i < request.size(); i++) {
+		string packetID = "";
+		for (; request[i] != ' '; i++) {
 			filename += request[i];
 		}
+		i++;
+		for (; i < request.size(); i++) {
+			packetID += request[i];
+		}
+
 		int size = fileManager.getFileSize(filename);
-		response = intToString(size);
-		reply(response, sock, client_address);
+		response = intToString(size) + packetID;
+		bool complete = false;
+		do {
+			reply(response, sock, client_address);
+			listenForACK(packetID, sock, client_address, complete);
+			if (complete) {
+				cout << "OctoCheck ACK received" << endl;
+			}
+		} while (!complete);
+		//use a do while loop, do (send all legs), while (listenForACK returns false)
+
 	} else if (type == "OctoGetFullLegs:") {
 		int filesize;
-		string fs, packetID = "";
+		string fs, packetIDstr = "";
 		for (; request[i] != ' '; i++) {
 			filename += request[i];
 		}
@@ -276,23 +438,49 @@ void multiResponse(string request, int sock,
 
 		i++;
 		for (; i < request.size(); i++) {
-			packetID += request[i];
+			packetIDstr += request[i];
 		}
 
-		int completedSize = (filesize / OCTOBLOCK_SIZE) * OCTOBLOCK_SIZE;
-
+		int packetID = stringToInt(packetIDstr);
+		int completedBlocks = (filesize / OCTOBLOCK_SIZE);
 		int start = 0;
 		int octaLegSize = 1111;
-		for (int i = 0; i<completedSize; i++){
-			response = fileManager.getFileRange(filename, start, octaLegSize)
-								+ getSequence(i) + packetID;
-			start += octaLegSize;
-			reply(response, sock, client_address);
+		int maxAttempts = 4;
+		int attempts = 0;
+		bool recvd = false;
+		for (int i = 0; i < completedBlocks; i++) { //octablocks
+			do {
+				attempts++;
+				for (int j = 0; j < 8; j++) { //octalegs
+					start = (i * 8888) + (j * 1111);
+					response = fileManager.getFileRange(filename, start, octaLegSize) + getSequence(j)
+							+ intToString(packetID);
+					cout << "FullBlock: start " << start << " end:"
+						<< start + octaLegSize << " i: "<<i<<endl;
+					cout << "sending leg # " << j << " from block " << i
+							<< endl;
+					cout <<"leg contents:"<<endl;
+					cout<<response<<endl;
+					reply(response, sock, client_address);
+				}
+				listenForACK(packetIDstr, sock, client_address, recvd);
+				if (recvd) {
+					cout << "received ACK for octoblock " << i << endl;
+				}
 
+			} while (!recvd && (attempts < maxAttempts));
+			if (attempts == maxAttempts) {
+				cout << "**Server Timeout**" << endl;
+				break;
+			} else {
+				packetID++; //update after every full block is sent
+				packetIDstr = intToString(packetID);
+				attempts = 0;
+			}
 		}
 
 	} else if (type == "OctoGetPartLegs:") {
-		int filesize, completedBlocks;
+		int filesize;
 		string fs, packetID, cB = "";
 		for (; request[i] != ' '; i++) {
 			filename += request[i];
@@ -309,7 +497,8 @@ void multiResponse(string request, int sock,
 			packetID += request[i];
 		}
 
-		int completedSize = (filesize / OCTOBLOCK_SIZE) * OCTOBLOCK_SIZE;
+		int completedBlocks = (filesize / OCTOBLOCK_SIZE);
+		int completedSize = completedBlocks * OCTOBLOCK_SIZE;
 		int remainingSize = filesize - completedSize;
 		int partialSize = remainingSize - (remainingSize % 8);
 		int octaLegSize = partialSize / 8;
@@ -319,6 +508,8 @@ void multiResponse(string request, int sock,
 			response = fileManager.getFileRange(filename, start, octaLegSize)
 					+ getSequence(i) + packetID;
 			cout << "server's payload size: " << response.size() << endl;
+			cout << "Partblock: start " << start << " end:"
+					<< start + octaLegSize << "i=" << i << endl;
 			start += octaLegSize;
 			reply(response, sock, client_address);
 		}
@@ -349,10 +540,11 @@ void multiResponse(string request, int sock,
 			int end = start + 1;
 			response = fileManager.getFileRange(filename, start, 1)
 					+ getSequence(i) + packetID;
+			cout << "Tinyblock: start " << start << " end:" << start + 1;
 			reply(response, sock, client_address);
 		}
 
-		for (;i < 8;i++) {
+		for (; i < 8; i++) {
 			response = PADBYTE + getSequence(i) + packetID;
 			reply(response, sock, client_address);
 		}
@@ -362,8 +554,28 @@ void multiResponse(string request, int sock,
 
 int main(int argc, char *argv[]) {
 
-	//FileManager fileManager;
-	//string fileName = "fake.txt";
+	FileManager fileManager;
+	string filename = "32KB.txt";
+	cout <<"size: "<<fileManager.getFileSize(filename)<<endl;
+//	int diff = 27427 - 26664;
+string c = fileManager.getFileRange(filename, 0, 8888);
+string c1 = fileManager.getFileRange(filename, 8888, 8888);
+//string c2 = fileManager.getFileRange(filename, 7777, 1111);
+//string b = fileManager.getFileRange(filename, 8888, 1111);
+//string b2 = fileManager.getFileRange(filename, 9999, 7777);
+cout<<"E"<<endl;
+cout<<c+c1<<endl;
+//	string c = fileManager.getFileRange(filename, 26664, 32768-26664);
+//fileManager.getFileRange(filename, 1111, 1111)+
+//			//fileManager.getFileRange(filename, 26664, (27427-26665));
+//	cout << "c" << endl;
+//	cout << c << endl;
+//	string a = fileManager.getFileRange(filename, 26664, 743);
+//	cout << "a" << endl;
+//	cout << a << endl;
+//	string b = fileManager.getFileRange(filename, 26664, 1);
+//	cout << "E" << endl;
+//	cout << c+a << endl;
 	//int test = fileManager.getFileSize(fileName);
 	//string fileContents = "";
 	//int fileSize = -1;
@@ -403,6 +615,16 @@ int main(int argc, char *argv[]) {
 	struct sockaddr_in client_address;
 	unsigned int client_address_len = sizeof(client_address);
 	char client_name[100];
+
+	//--add timer to recvfrom--
+//	struct timeval timeout = { 5, 0 }; //set timeout for 2 seconds
+//
+//	/* set receive UDP message timeout */
+//
+//	setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout,
+//			sizeof(struct timeval));
+	//---------------------------
+
 	// run indefinitely
 	while (true) {
 		char buffer[500];
@@ -421,7 +643,8 @@ int main(int argc, char *argv[]) {
 		// send same content back to the client ("echo")
 
 		multiResponse(buffer, sock, client_address);
-
+		cout << "--end multiresponse" << endl;
+//		break;
 //		string response = generateResponse(buffer);
 //		cout << "generated response: " << response << endl;
 //		int n = response.length();
@@ -434,7 +657,7 @@ int main(int argc, char *argv[]) {
 
 		//	int pipe1[2]; // Read from parent to check timeout
 
-		pid_t p;
+//		pid_t p;
 
 //		p = fork();
 
