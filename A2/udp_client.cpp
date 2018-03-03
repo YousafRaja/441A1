@@ -21,6 +21,8 @@ int OCTOLEG_SIZE = 1111;
 int OCTOMINI_SIZE = 8;
 char PADBYTE = '~';
 
+bool packetDropped = false; //set to true to drop first packet
+
 int getRandom() {
 	std::random_device rd;
 	std::mt19937 mt(rd()); // seed the Mersenne Twister generator
@@ -146,6 +148,13 @@ string collectResponses(int sock, struct sockaddr_in server_address,
 				int s = getSequenceNum(seq);
 				//process sequence number into map
 				fileParts[s] = extractData(buffer);
+				if (!packetDropped) {
+					cout << "PACKET DROPPED" << endl;
+					fileParts.erase(s);
+					packetDropped=true;
+				}
+
+
 				//check if complete
 				complete = true;
 				cout << "recieved part " << intToString(s) << endl;
@@ -209,7 +218,7 @@ string getTinyLegs(string filename, int filesize, int sock,
 	int len = sendto(sock, data_to_send, strlen(data_to_send), 0,
 			(struct sockaddr*) &server_address, sizeof(server_address));
 
-	while(response==""){
+	while (response == "") {
 
 		printf("message has been sent to server\n");
 
@@ -218,8 +227,6 @@ string getTinyLegs(string filename, int filesize, int sock,
 			printf("Timeout or error in t, re-sending\n");
 		}
 	}
-
-
 
 	return response;
 
@@ -235,24 +242,23 @@ string getPartialLegs(string filename, int filesize, int sock,
 	int parts = 8;
 	string response = "";
 
-	int ranNum = getRandom();
+	int packetID = getRandom();
 	string msg = "OctoGetPartLegs:" + filename + " " + intToString(filesize)
-			+ " " + intToString(ranNum);
+			+ " " + intToString(packetID);
 
 	const char* data_to_send = msg.c_str();
 	int len = sendto(sock, data_to_send, strlen(data_to_send), 0,
 			(struct sockaddr*) &server_address, sizeof(server_address));
+	printf("message has been sent to server with the following ID:\n");
+			cout << "expectedID:" << packetID << endl;
 
 	while (response == "") {
 
 
-			printf("message has been sent to server with the following ID:\n");
-			cout << "expectedID:" << ranNum << endl;
-			response = collectResponses(sock, server_address, ranNum, parts);
-			if (response == "") {
-				printf("Timeout or error in partial legs, re-sending\n");
-			}
-
+		response = collectResponses(sock, server_address, packetID, parts);
+		if (response == "") {
+			printf("Timeout or error in partial legs, waiting for retransmission\n");
+		}
 
 	}
 	return response;
@@ -284,9 +290,7 @@ string getFullLegs(string filename, int filesize, int sock,
 
 	while (totalParts > 0 || response == "") {
 
-
-		response = collectResponses(sock, server_address, packetID,
-				totalParts);
+		response = collectResponses(sock, server_address, packetID, totalParts);
 		if (response == "") {
 			printf("Timeout or error in full legs, re-sending\n");
 		} else {
@@ -459,7 +463,7 @@ int main() {
 			sizeof(struct timeval));
 
 	// get filename
-	string filename = "32KB.txt";
+	string filename = "256KB.txt";
 	//cout <<"Hello, please enter the name of the file you'd like to retrieve" << endl;
 	//cin >> filename;
 
@@ -478,8 +482,8 @@ int main() {
 	fullResponse += partialResponse;
 
 	string TinyLeg = getTinyLegs(filename, filesize, sock, server_address);
-	cout <<"TinyLeg:"<<endl;
-	cout<<TinyLeg<<endl;
+	cout << "TinyLeg:" << endl;
+	cout << TinyLeg << endl;
 	fullResponse += TinyLeg;
 	//remainingSize -= (filesize / OCTOBLOCK_SIZE) * OCTOBLOCK_SIZE;
 	//partialBlock = remainingSize - (remainingSize % 8);
