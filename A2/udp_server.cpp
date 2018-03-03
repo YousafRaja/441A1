@@ -68,162 +68,7 @@ int decimalToOctal(int decimalNumber) {
 	return octalNumber;
 }
 
-//string generateResponse(string request) { // TODO: also return a ACK#
-//
-//	string type;
-//	string filename = "";
-//	string response = "INVALID REQUEST";
-//
-//	unsigned int i = 0;
-//	for (; i < request.size(); i++) {
-//		type += request[i];
-//		if (request[i] == ':') {
-//			break;
-//		}
-//	}
-//
-//	i++; //skip passed ":"
-//	FileManager fileManager;
-//	int blockSize = 8888;
-//	int blockNumber;
-//	int legSize = 1111;
-//	int legNumber;
-//	int miniSize = 8;
-//	int miniNumber;
-//	string bN, lN, mN = "";
-//	if (type == "OctoCheck:") {
-//		for (; i < request.size(); i++) {
-//			filename += request[i];
-//		}
-//		int size = fileManager.getFileSize(filename);
-//		response = intToString(size);
-//	} else if (type == "OctoGetBlock:") {
-//		for (; request[i] != ' '; i++) {
-//			filename += request[i];
-//		}
-//		i++;
-//		for (; i < request.size(); i++) {
-//			bN += request[i];
-//			blockNumber = stringToInt(bN);
-//		}
-//
-//		response = fileManager.getFileRange(filename, (blockNumber), blockSize);
-//
-//	} else if (type == "OctoGetLeg:") {
-//		for (; request[i] != ' '; i++) {
-//			filename += request[i];
-//		}
-//		i++;
-//		for (; request[i] != ' '; i++) {
-//			bN += request[i];
-//			blockNumber = stringToInt(bN);
-//		}
-//		for (; i < request.size(); i++) {
-//			lN += request[i];
-//			legNumber = stringToInt(lN);
-//		}
-//
-//		response = fileManager.getFileRange(filename,
-//				((blockNumber * blockSize) + (legNumber * legSize)), legSize)
-//				+ intToString(decimalToOctal(legNumber));
-//
-//	} else if (type == "OctoGetMinis:") {
-//
-//		for (; request[i] != ' '; i++) {
-//			filename += request[i];
-//		}
-//		i++; //skip past ' '
-//		for (; request[i] != ' '; i++) {
-//			bN += request[i];
-//			blockNumber = stringToInt(bN);
-//		}
-//		i++;
-//		for (; request[i] != ' '; i++) {
-//			lN += request[i];
-//			legNumber = stringToInt(lN);
-//
-//		}
-//		for (; i < request.size(); i++) {
-//			mN += request[i];
-//			miniNumber = stringToInt(mN);
-//		}
-//
-//		response = fileManager.getFileRange(filename,
-//				((blockNumber * blockSize) + (legNumber * legSize)),
-//				(miniNumber * miniSize));
-//		response = fileManager.addPadding(response, response.size());
-//		cout << "mini response:" << endl;
-//		cout << response << endl;
-//
-//	} else if (type == "OctoGetLegPartial") {
-//
-//		int startNum, endNum, sequenceNum;
-//		string sN, eN, seN = "";
-//		for (; request[i] != ' '; i++) {
-//			filename += request[i];
-//		}
-//		i++; //skip past ' '
-//		for (; request[i] != ' '; i++) {
-//			bN += request[i];
-//			blockNumber = stringToInt(bN);
-//		}
-//		i++;
-//		for (; request[i] != ' '; i++) {
-//			sN += request[i];
-//			startNum = stringToInt(sN);
-//
-//		}
-//		i++;
-//		for (; request[i] != ' '; i++) {
-//			sN += request[i];
-//			startNum = stringToInt(sN);
-//
-//		}
-//		i++;
-//		for (; i < request.size(); i++) {
-//			seN += request[i];
-//			sequenceNum = stringToInt(seN);
-//		}
-//
-//		response = fileManager.getFileRange(filename, startNum,
-//				(endNum - startNum));
-//
-//		response = fileManager.addPadding(response, response.size());
-//
-//		response += intToString(decimalToOctal(sequenceNum));
-//
-//	} else if (type == "OctoGetTiny:") {
-//
-//		int sequenceNum, tinyNum;
-//		string tN, sN = "";
-//		for (; request[i] != ' '; i++) {
-//			filename += request[i];
-//		}
-//		i++; //skip past ' '
-//		for (; request[i] != ' '; i++) {
-//			tN += request[i];
-//			tinyNum = stringToInt(bN);
-//		}
-//		i++; //skip past ' '
-//		for (; i < request.size(); i++) {
-//			sN += request[i];
-//			sequenceNum = stringToInt(sN);
-//		}
-//
-//		if (tinyNum == -1) {
-//			response = PADBYTE;
-//		} else {
-//			response = fileManager.getFileRange(filename, tinyNum, 1);
-//		}
-//
-//		response = fileManager.addPadding(response, response.size());
-//
-//		response += intToString(decimalToOctal(sequenceNum));
-//	}
-//
-//	return response;
-//
-//}
+
 
 void reply(string response, int sock, struct sockaddr_in client_address) {
 	unsigned int client_address_len = sizeof(client_address);
@@ -267,35 +112,7 @@ bool isValidID(string msg) {
 		return true;
 	}
 }
-//
-//bool waitForACK(string packetIDstr, int sock,
-//		struct sockaddr_in client_address) {
-//
-//	string msg = "";
-//	int packetID = stringToInt(packetIDstr);
-//	string ACKstr = intToString(packetID + 1);
-//
-//	int check = 100;
-//	while (check < 100) {
-//		check++;
-//		char buffer[500];
-//		listenForMsg(sock, client_address, buffer);
-//		string str(buffer);
-//		msg = str;
-//		cout << "expecting " << ACKstr << " received " << msg << endl;
-//
-//		if (isValidID(msg)) {
-//			int recvdID = stringToInt(msg);
-//			int ACK = stringToInt(ACKstr);
-//			if (recvdID > ACK && (recvdID - ACK) < 8) {
-//				break;
-//			}
-//		}
-//
-//	}
-//
-//	return (check < 100);
-//}
+
 
 void listenForACK(string packetID, int sock, struct sockaddr_in client_address,
 		bool &heard) {
@@ -492,8 +309,8 @@ void multiResponse(string request, int sock,
 							<< start + octaLegSize << " i: " << i << endl;
 					cout << "sending leg # " << j << " from block " << i
 							<< endl;
-					cout << "leg contents:" << endl;
-					cout << response << endl;
+					//cout << "leg contents:" << endl;
+					//cout << response << endl;
 					reply(response, sock, client_address);
 				}
 				listenForACK(packetIDstr, sock, client_address, recvd);
@@ -612,33 +429,6 @@ void multiResponse(string request, int sock,
 
 int main(int argc, char *argv[]) {
 
-	FileManager fileManager;
-	string filename = "32KB.txt";
-	cout << "size: " << fileManager.getFileSize(filename) << endl;
-//	int diff = 27427 - 26664;
-	string c = fileManager.getFileRange(filename, 0, 8888);
-	string c1 = fileManager.getFileRange(filename, 8888, 8888);
-//string c2 = fileManager.getFileRange(filename, 7777, 1111);
-//string b = fileManager.getFileRange(filename, 8888, 1111);
-//string b2 = fileManager.getFileRange(filename, 9999, 7777);
-	cout << "E" << endl;
-	cout << c + c1 << endl;
-//	string c = fileManager.getFileRange(filename, 26664, 32768-26664);
-//fileManager.getFileRange(filename, 1111, 1111)+
-//			//fileManager.getFileRange(filename, 26664, (27427-26665));
-//	cout << "c" << endl;
-//	cout << c << endl;
-//	string a = fileManager.getFileRange(filename, 26664, 743);
-//	cout << "a" << endl;
-//	cout << a << endl;
-//	string b = fileManager.getFileRange(filename, 26664, 1);
-//	cout << "E" << endl;
-//	cout << c+a << endl;
-//int test = fileManager.getFileSize(fileName);
-//string fileContents = "";
-//int fileSize = -1;
-//fileManager.findFile(fileName, fileContents, fileSize);
-
 // port to start the server on
 	int SERVER_PORT = PORT;
 
@@ -660,6 +450,14 @@ int main(int argc, char *argv[]) {
 		printf("could not create socket\n");
 		return 1;
 	}
+
+	// create a UDP socket, creation returns -1 on failure
+		int sock2;
+		if ((sock = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+			printf("could not create socket\n");
+			return 1;
+		}
+
 	printf("server socket created\n");
 	// bind it to listen to the incoming connections on the created server
 	// address, will return -1 on error
@@ -673,15 +471,6 @@ int main(int argc, char *argv[]) {
 	struct sockaddr_in client_address;
 	unsigned int client_address_len = sizeof(client_address);
 	char client_name[100];
-
-	//--add timer to recvfrom--
-//	struct timeval timeout = { 5, 0 }; //set timeout for 2 seconds
-//
-//	/* set receive UDP message timeout */
-//
-//	setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout,
-//			sizeof(struct timeval));
-//---------------------------
 
 // run indefinitely
 	while (true) {
@@ -702,42 +491,7 @@ int main(int argc, char *argv[]) {
 
 		multiResponse(buffer, sock, client_address);
 		cout << "--end multiresponse" << endl;
-//		break;
-//		string response = generateResponse(buffer);
-//		cout << "generated response: " << response << endl;
-//		int n = response.length();
-//		char char_array[n];
-//		strcpy(char_array, response.c_str());
-//		int sent_len = sendto(sock, char_array, n + 1, 0,
-//				(struct sockaddr *) &client_address, client_address_len);
-//		printf("server sent back message of size:%d\n", sent_len);
-//		printf("server sent back message containing:%s\n", response);
 
-//	int pipe1[2]; // Read from parent to check timeout
-
-//		pid_t p;
-
-//		p = fork();
-
-// Parent process
-//		if (p > 0) {
-//			int pipe2[2]; // Read from parent to check ACKs
-//			pid_t p2;
-//			p2 = fork();
-//
-//			if (p2 > 0) { // parent
-//				// read from pipe2 to check ACK
-//				// read from pipe1 to check for timeout
-//				// take action based on what was read
-//			} else { // child2
-//				// call recevfrom() to receive the possible ACK from the client
-//				// use pipe2 to send the notification to the parent process
-//			}
-//
-//		} else { //child process
-//			// start timer
-//			// use pipe1 to send notification after timer is done
-//		}
 
 	}
 	close(sock);

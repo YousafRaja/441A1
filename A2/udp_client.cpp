@@ -21,7 +21,7 @@ int OCTOLEG_SIZE = 1111;
 int OCTOMINI_SIZE = 8;
 char PADBYTE = '~';
 
-bool packetDropped = false; //set to true to drop first packet
+bool packetDropped = false; //set to FALSE to drop first packet
 
 int getRandom() {
 	std::random_device rd;
@@ -151,9 +151,8 @@ string collectResponses(int sock, struct sockaddr_in server_address,
 				if (!packetDropped) {
 					cout << "PACKET DROPPED" << endl;
 					fileParts.erase(s);
-					packetDropped=true;
+					packetDropped = true;
 				}
-
 
 				//check if complete
 				complete = true;
@@ -250,14 +249,14 @@ string getPartialLegs(string filename, int filesize, int sock,
 	int len = sendto(sock, data_to_send, strlen(data_to_send), 0,
 			(struct sockaddr*) &server_address, sizeof(server_address));
 	printf("message has been sent to server with the following ID:\n");
-			cout << "expectedID:" << packetID << endl;
+	cout << "expectedID:" << packetID << endl;
 
 	while (response == "") {
 
-
 		response = collectResponses(sock, server_address, packetID, parts);
 		if (response == "") {
-			printf("Timeout or error in partial legs, waiting for retransmission\n");
+			printf(
+					"Timeout or error in partial legs, waiting for retransmission\n");
 		}
 
 	}
@@ -376,7 +375,7 @@ int getFileLength(string fileName, int sock,
 		struct sockaddr_in server_address) {
 	// send data
 	int ACK = getRandom();
-	string data = OctoCheck + fileName + " " + intToString(ACK);
+	string data = "OctoCheck:" + fileName + " " + intToString(ACK);
 	string response = SendRecvMsg(data, sock, server_address);
 	int len = response.length();
 	response = response.substr(0, len - 4);
@@ -455,67 +454,44 @@ int main() {
 	}
 	printf("client socket created\n");
 
-	struct timeval timeout = { 60, 0 }; //set timeout for 2 seconds
 
-	/* set receive UDP message timeout */
-
-	setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout,
-			sizeof(struct timeval));
+//	struct timeval timeout = { 60, 0 }; //set timeout for 2 seconds
+//
+//	/* set receive UDP message timeout */
+//
+//	setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout,
+//			sizeof(struct timeval));
 
 	// get filename
-	string filename = "256KB.txt";
-	//cout <<"Hello, please enter the name of the file you'd like to retrieve" << endl;
-	//cin >> filename;
+	int remainingSize = -1;
+	string filename="";
+	cout <<"Hello,";
+	while (remainingSize == -1) {
+		cout<< "please enter the name of a valid server file"<<endl;
+		cin >> filename;
+		remainingSize = getFileLength(filename, sock, server_address);
+	}
 
 	string fullResponse = "";
-	int remainingSize = getFileLength(filename, sock, server_address);
+
 	int b = getOctoblocks(remainingSize);
 	int partialBlock;
 	int filesize = remainingSize;
 	fullResponse += getFullLegs(filename, filesize, sock, server_address);
 	cout << "Fullleg:" << endl;
 	cout << fullResponse << endl;
+	//close(sock);
+	//sleep(30);
 	string partialResponse = getPartialLegs(filename, filesize, sock,
 			server_address);
 	cout << "Partialleg:" << endl;
 	cout << partialResponse << endl;
 	fullResponse += partialResponse;
-
+//
 	string TinyLeg = getTinyLegs(filename, filesize, sock, server_address);
 	cout << "TinyLeg:" << endl;
 	cout << TinyLeg << endl;
 	fullResponse += TinyLeg;
-	//remainingSize -= (filesize / OCTOBLOCK_SIZE) * OCTOBLOCK_SIZE;
-	//partialBlock = remainingSize - (remainingSize % 8);
-	//remainingSize = (remainingSize % 8);
-
-	//remainingSize -= b * OCTOBLOCK_SIZE;
-
-	//int l = getOctolegs(remainingSize);
-	//remainingSize -= l * OCTOLEG_SIZE;
-
-	//int m = getOctoMinis(remainingSize);
-	//remainingSize = m * OCTOMINI_SIZE - remainingSize; //any remaining amount will be pad bytes
-
-//	int i = 0;
-//	while (remainingSize >= 8888) {
-//		// get all 8 parts of the full octoblock
-//		fullResponse += sendBlockMsg(filename, sock, server_address, i);
-//		i++;
-//		remainingSize -= 8888;
-//	}
-//
-//	int partialBlock = 0;
-//	if (remainingSize > 8) {
-//		partialBlock = remainingSize - (remainingSize % 8);
-//		fullResponse += sendPartialBlockMsg(filename, sock, server_address, i,
-//				partialBlock);
-//	}
-//	remainingSize -= partialBlock;
-//	if (remainingSize > 0) {
-//		fullResponse += sendTinyBlockMsg(filename, sock, server_address,
-//				remainingSize, filesize);
-//	}
 
 	cout << "current full response2:" << endl;
 	cout << fullResponse << endl;
